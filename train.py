@@ -38,16 +38,18 @@ def mean_squared_relative_error(y_true, y_pred):
                                             None))
     return K.mean(diff, axis=-1)
 
-def get_features_targets(file_name, features, targets):
+def get_features_targets(file_name, features, targets, spectators):
     # load file
     h5file = tables.open_file(file_name, 'r')
     nevents = getattr(h5file.root,features[0]).shape[0]
     ntargets = len(targets)
     nfeatures = len(features)
+    nspec = len(spectators)
 
     # allocate arrays
     feature_array = np.zeros((nevents,nfeatures))
     target_array = np.zeros((nevents,ntargets))
+    spec_array = np.zeros((nevents,nspec))
 
     # load feature arrays
     for (i, feat) in enumerate(features):
@@ -55,49 +57,36 @@ def get_features_targets(file_name, features, targets):
     # load target arrays
     for (i, targ) in enumerate(targets):
         target_array[:,i] = getattr(h5file.root,targ)[:]
+    for (i, targ) in enumerate(spectators):
+        spec_array[:,i] = getattr(h5file.root,targ)[:]
 
     h5file.close()
-    return feature_array,target_array
+    return feature_array,target_array,spec_array
 
 def main(args):
-    file_path = 'input_MET.h5'
-    features = ['L1CHSMet_pt', 'L1CHSMet_phi',
-                'L1CaloMet_pt', 'L1CaloMet_phi',
-                'L1PFMet_pt', 'L1PFMet_phi',
-                'L1PuppiMet_pt', 'L1PuppiMet_phi',
-                'L1TKMet_pt', 'L1TKMet_phi',
-                'L1TKV5Met_pt', 'L1TKV5Met_phi',
-                'L1TKV6Met_pt', 'L1TKV6Met_phi']
+    file_path = 'input_MET_DY.h5'
 
-    targets = ['genMet_pt', 'genMet_phi']
+    features = [
+        "L1CaloMet_para_puppi","L1CaloMet_perp_puppi",
+        "L1PFMet_para_puppi","L1PFMet_perp_puppi",
+        "L1PuppiMet_para_puppi","L1PuppiMet_perp_puppi",
+        "CaloHTMiss_para_puppi","CaloHTMiss_perp_puppi",
+        "PFHTMiss_para_puppi","PFHTMiss_perp_puppi",
+        "PuppiHTMiss_para_puppi","PuppiHTMiss_perp_puppi",
+    ]
 
-    feature_array, target_array = get_features_targets(file_path, features, targets)
-    nevents_1 = feature_array.shape[0]
+    targets = ["genMet_para_puppi","genMet_perp_puppi",]
+    spectators = ["ptz","event"]
+
+    feature_array, target_array, spectator_array = get_features_targets(file_path, features, targets, spectators)
+    nevents = feature_array.shape[0]
     nfeatures = feature_array.shape[1]
     ntargets = target_array.shape[1]
-
-	# Exclude met, phi = 0 events
-    event_zero = 0
-    skip = 0
-    for i in range(nevents_1):
-        if (feature_array[i,10] == 0 and feature_array[i,11] == 0) or (feature_array[i,12] ==0 and feature_array[i,13] ==0):
-            event_zero = event_zero + 1
-    feature_array_without0 = np.zeros((nevents_1 - event_zero, 14))
-    target_array_without0 = np.zeros((nevents_1 - event_zero, 2))
-    for i in range(nevents_1):
-        if (feature_array[i,10] == 0 and feature_array[i,11] == 0) or (feature_array[i,12] ==0 and feature_array[i,13] ==0):
-            skip = skip + 1
-            continue
-        feature_array_without0[i - skip,:] = feature_array[i,:]
-        target_array_without0[i - skip,:] = target_array[i,:]
-    print(feature_array_without0)
-    print(target_array_without0)
-    nevents = feature_array_without0.shape[0]
-
+    nspec = spectator_array.shape[1]
 
     # fit keras model
-    X = feature_array_without0
-    y = target_array_without0
+    X = feature_array
+    y = target_array
 
     fulllen = nevents
     tv_frac = 0.10
@@ -113,52 +102,25 @@ def main(args):
     y_val = y[splits[1]:splits[2]]
     y_test = y[splits[0]:splits[1]]
 
+    spec_train = spectator_array[0:splits[0]]
+    spec_val = spectator_array[splits[1]:splits[2]]
+    spec_test = spectator_array[splits[0]:splits[1]]
 
-    # Set parameters for weight function
-    number_of_interval = 100
-    mean = y_val.shape[0]/number_of_interval
-
-
-    # Devide interval
-    MET_interval = np.zeros(number_of_interval)
-    for i in range(y_val.shape[0]):
-        for j in range(number_of_interval):
-            if (5 * j <= y_val[i,0] < 5 * (j+1)):
-               MET_interval[j] = MET_interval[j]+1
-               
-    def weight_array_function_MET(y_true):
-        k = 0
-        for i in range(number_of_interval):
-            if 5 * i <= y_true < 5 * (j+1):
-                break
-            k = MET_interval[j]
-        if k == 0:
-            k = 1
-        return mean/k
-
-    weight_array_MET= np.zeros(y_test.shape[0])
-    for i in range(y_test.shape[0]):
-        weight_array_MET[i] = weight_array_function_MET(y_val[i,0])
-
-    def weight_loss_MET(y_true, y_pred):
-        return K.mean(math_ops.square((y_pred - y_true)*weight_array_MET), axis=-1)
-
-    def mean_squared_phi_error(y_true, y_pred):
-        error = tf.atan2(tf.sin(y_pred - y_true), tf.cos(y_pred - y_true)) - math.pi
-        return K.mean(math_ops.square(error), axis=-1)
+    def loss_para(y_true, y_pred):
+        return K.mean(math_ops.square(y_pred - y_true), axis=-1)
+    def loss_perp(y_true, y_pred):
+        return K.mean(math_ops.square(y_pred - y_true), axis=-1)
 
     keras_model = dense(nfeatures, ntargets)
 
-    keras_model.compile(optimizer='adam', loss=[weight_loss_MET, mean_squared_phi_error], 
-                        loss_weights = [10., 1.], metrics=['mean_absolute_error'])
+    keras_model.compile(optimizer='adam', loss=[loss_para, loss_perp], 
+                        loss_weights = [1., 1.], metrics=['mean_absolute_error'])
     print(keras_model.summary())
 
     early_stopping = EarlyStopping(monitor='val_loss', patience=10)
     model_checkpoint = ModelCheckpoint('keras_model_best.h5', monitor='val_loss', save_best_only=True)
     callbacks = [early_stopping, model_checkpoint]
-    def mean_squared_phi_error(y_true, y_pred):
-        error = tf.atan2(tf.sin(y_pred - y_true), tf.cos(y_pred - y_true)) - math.pi
-        return K.mean(math_ops.square(error), axis=-1)
+
     keras_model.fit(X_train, [y_train[:,:1], y_train[:,1:]], batch_size=1024, 
                     epochs=100, validation_data=(X_val, [y_val[:,:1], y_val[:,1:]]), shuffle=True,
                     callbacks = callbacks)
@@ -167,21 +129,24 @@ def main(args):
     
     predict_test = keras_model.predict(X_test)
     predict_test = np.concatenate(predict_test,axis=1)
-    print(y_test)
-    print(predict_test)
+    # print(y_test)
+    # print(predict_test)
 
     def print_res(gen_met, predict_met, name='Met_res.pdf'):
-		rel_err = (predict_met - gen_met)/np.clip(gen_met, 1e-6, None)
-		plt.figure()          
-		plt.hist(rel_err, bins=np.linspace(-1., 1., 50+1))
-		plt.xlabel("Rel. err.")
-		plt.ylabel("Events")
-		plt.figtext(0.25, 0.90,'CMS',fontweight='bold', wrap=True, horizontalalignment='right', fontsize=14)
-		plt.figtext(0.35, 0.90,'preliminary', style='italic', wrap=True, horizontalalignment='center', fontsize=14) 
-		plt.savefig(name)
+        plt.figure()          
+        #rel_err = (predict_met - gen_met)/np.clip(gen_met, 1e-6, None)
+        #plt.hist(rel_err, bins=np.linspace(-1., 1., 50+1))
+        #plt.hist(err, bins=np.linspace(-1., 1., 50+1))
+        err = (predict_met - gen_met)
+        plt.hist(err, bins=np.linspace(-100., 100., 50+1))
+        plt.xlabel("Rel. err.")
+        plt.ylabel("Events")
+        plt.figtext(0.25, 0.90,'CMS',fontweight='bold', wrap=True, horizontalalignment='right', fontsize=14)
+        plt.figtext(0.35, 0.90,'preliminary', style='italic', wrap=True, horizontalalignment='center', fontsize=14) 
+        plt.savefig(name)
 	
-    print_res(y_test[:,0], predict_test[:,0], name = 'MET_pt_res.pdf')
-    print_res(y_test[:,1], predict_test[:,1], name = 'MET_phi_res.pdf')
+    print_res(y_test[:,0], predict_test[:,0], name = 'MET_para_res.pdf')
+    print_res(y_test[:,1], predict_test[:,1], name = 'MET_perp_res.pdf')
     
 
 if __name__ == "__main__":
