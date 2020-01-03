@@ -179,6 +179,7 @@ int main(){
     float mll; t->Branch("mll", &mll, "mll/F");
     float ptz; t->Branch("ptz", &ptz, "ptz/F");
     int nmu; t->Branch("nmu", &nmu, "nmu/I");
+    int event; t->Branch("event", &event, "event/I");
 
     // eventloop helpers
     TVector2 vZ,vPuppi,vPuppiRecoil, vin, vrecoil, vPuppiMetProxy, vinMetProxy;
@@ -190,6 +191,7 @@ int main(){
         ie++;
         //if (ie>10) break;
 
+        event=ie;
         nmu = muons.n();
         mll=-1.;
         ptz=-1.;

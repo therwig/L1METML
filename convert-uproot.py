@@ -16,7 +16,7 @@ outfile = 'input_MET_DY.h5'
 #entrystop = 10000
 entrystop = None
 
-other_branches = []
+#other_branches = ['ptz']
 
 met_types=["L1Calo","L1PF","L1Puppi","gen"]
 met_regions = ["","Central","Barrel"]
@@ -29,6 +29,7 @@ for t in met_types:
 met_branches = []
 for comp in ["para_z","perp_z","para_puppi","perp_puppi"]:
     met_branches += [x+"_"+comp for x in met_categories]
+met_branches += ['ptz','event']
 
 # print(met_branches)
 # exit(0)
