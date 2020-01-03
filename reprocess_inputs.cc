@@ -147,35 +147,41 @@ int main(){
     // inputs jets for HTmiss computation
     map<TString,TLVArrayReader*> jet_map;
     for(TString s : {"Calo","PF","Puppi"}){
-        jet_map[s] = new TLVArrayReader(&reader,"L1"+s+"Jets");
+        jet_map[s+"HTMiss"] = new TLVArrayReader(&reader,"L1"+s+"Jets");
     }
     //muons for z reconstruction
+    //const bool reqZ=false;
+    const bool reqZ=true;
     TLVArrayReader muons(&reader,"PFMu");
 
     //
     // MET outputs
     //
-    TFile* f = new TFile("samples/perfNano_DY_reprocessed.root","recreate");
+    TString foutname=reqZ?"samples/perfNano_DY_reprocessed.root":"samples/perfNano_DY_reprocessed_all.root";
+    TFile* f = new TFile(foutname,"recreate");
     TTree* t = new TTree("Events","");    
     map<TString,MetWriter*> output_map_z;
     map<TString,MetWriter*> output_map_puppi;
+    vector<TString> out_keys;
     for(auto n : met_inputs){
-        output_map_z[n] = new MetWriter(n,t,"z");
+        out_keys.push_back(n);
+        if(reqZ) output_map_z[n] = new MetWriter(n,t,"z");
         output_map_puppi[n] = new MetWriter(n,t,"puppi");
     }
     for(auto x : jet_map){
-        TString n = x.first+"HTMiss";
-        output_map_z[n] = new MetWriter(n,t,"z");
+        TString n = x.first;
+        out_keys.push_back(n);
+        if(reqZ) output_map_z[n] = new MetWriter(n,t,"z");
         output_map_puppi[n] = new MetWriter(n,t,"puppi");
     }
 
     // a few other variables to log in the output tree
     float mll; t->Branch("mll", &mll, "mll/F");
     float ptz; t->Branch("ptz", &ptz, "ptz/F");
-    int nmu; t->Branch("nmu", &nmu, "nmu/F");
+    int nmu; t->Branch("nmu", &nmu, "nmu/I");
 
     // eventloop helpers
-    TVector2 vZ,vPuppi,vPuppiRecoil, vin, vrecoil;
+    TVector2 vZ,vPuppi,vPuppiRecoil, vin, vrecoil, vPuppiMetProxy, vinMetProxy;
     TLorentzVector tlvZ;
 
     uint64_t ie=0;
@@ -185,47 +191,43 @@ int main(){
         //if (ie>10) break;
 
         nmu = muons.n();
-        if(muons.n()!=2) continue;
-        muons.FillTLVs(); // only fill data if needed
-        tlvZ = *(muons.tlv(0)) + *(muons.tlv(1));
-        mll=tlvZ.M();
-        ptz=tlvZ.Pt();
-        if(fabs(tlvZ.M()-91.)>15.) continue;
-        vZ.SetMagPhi(tlvZ.Pt(),tlvZ.Phi());
+        mll=-1.;
+        ptz=-1.;
+        if(nmu==2){
+            muons.FillTLVs(); // only fill data if needed
+            tlvZ = *(muons.tlv(0)) + *(muons.tlv(1));
+            mll=tlvZ.M();
+            ptz=tlvZ.Pt();
+            if(reqZ && fabs(tlvZ.M()-91.)<15.){
+                vZ.SetMagPhi(tlvZ.Pt(),tlvZ.Phi());
+            } else if(reqZ) continue;
+        } else if(reqZ) continue;
+
         vPuppi = input_map["L1PuppiMet"]->GetV();
-        vPuppiRecoil = -1.*(vPuppi+vZ);
-        //be careful about the signs here
+        //vPuppiRecoil = -1.*(vPuppi+vZ);
+        vPuppiMetProxy = vPuppi+vZ;
+        //be careful about the signs here!
 
         // precomputed MET
-        for(auto& x : input_map){
-            auto name = x.first;
-            auto input = x.second;
+        for(auto name : out_keys){
+            // get MET vector (or build from jets)
+            if (name.Contains("HTMiss")){
+                BuildMET(jet_map[name], vin);
+            } else {
+                vin = input_map[name]->GetV();
+            }
             auto writer_z = output_map_z[name];
             auto writer_puppi = output_map_puppi[name];
-            vin = x.second->GetV();
+            // get MET wrt the PUPPI estimate
+            vinMetProxy = (vin+vZ);
+            writer_puppi->Set(SgnPara(vinMetProxy-vPuppiMetProxy,vPuppiMetProxy),
+                              SgnPerp(vinMetProxy,vPuppiMetProxy));
             // get met para, perp components wrt Z
-            vrecoil = -1.*(vin+vZ);
-            writer_z->Set(SgnPara(vrecoil,vZ), 
-                          SgnPerp(vrecoil,vZ));
-            // get met wrt the PUPPI estimate
-            writer_puppi->Set(SgnPara(vrecoil-vPuppiRecoil,vPuppiRecoil),
-                              SgnPerp(vrecoil,vPuppiRecoil));
-        }
-        // again, now for the Jets
-        for(auto& x : jet_map){
-            auto name = x.first+"HTMiss";
-            auto jets = x.second;
-            auto writer_z = output_map_z[name];
-            auto writer_puppi = output_map_puppi[name];
-            // calculate inputs from Jets
-            BuildMET(jets, vin);
-            // get met para, perp components wrt Z
-            vrecoil = -1.*(vin+vZ);
-            writer_z->Set(SgnPara(vrecoil,vZ),
-                          SgnPerp(vrecoil,vZ));
-            // get met wrt the PUPPI estimate
-            writer_puppi->Set(SgnPara(vrecoil,vPuppiRecoil),
-                              SgnPerp(vrecoil,vPuppiRecoil));
+            if(reqZ){
+                vrecoil = -1.*(vin+vZ);
+                writer_z->Set(SgnPara(vrecoil,vZ), 
+                              SgnPerp(vrecoil,vZ));
+            }
         }
         t->Fill();
         nwritten++;
