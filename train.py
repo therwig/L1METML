@@ -40,7 +40,7 @@ def mean_squared_relative_error(y_true, y_pred):
 
 def get_features_targets(file_name, features, targets, spectators):
     # load file
-    h5file = tables.open_file(file_name, 'r')
+    h5file = tables.open_file(file_name, "r")
     nevents = getattr(h5file.root,features[0]).shape[0]
     ntargets = len(targets)
     nfeatures = len(features)
@@ -63,8 +63,32 @@ def get_features_targets(file_name, features, targets, spectators):
     h5file.close()
     return feature_array,target_array,spec_array
 
+def write_outputs(file_name, features, targets, spectators):
+    # write
+    h5file = tables.open_file(file_name, "r")
+    nevents = getattr(h5file.root,features[0]).shape[0]
+    ntargets = len(targets)
+    nfeatures = len(features)
+    nspec = len(spectators)
+
+    # allocate arrays
+    feature_array = np.zeros((nevents,nfeatures))
+    target_array = np.zeros((nevents,ntargets))
+    spec_array = np.zeros((nevents,nspec))
+
+    # load feature arrays
+    for (i, feat) in enumerate(features):
+        feature_array[:,i] = getattr(h5file.root,feat)[:]
+    # load target arrays
+    for (i, targ) in enumerate(targets):
+        target_array[:,i] = getattr(h5file.root,targ)[:]
+    for (i, targ) in enumerate(spectators):
+        spec_array[:,i] = getattr(h5file.root,targ)[:]
+
+    h5file.close()
+
 def main(args):
-    file_path = 'input_MET_DY.h5'
+    file_path = "input_MET_DY.h5"
 
     features = [
         "L1CaloMet_para_puppi","L1CaloMet_perp_puppi",
@@ -76,13 +100,15 @@ def main(args):
     ]
 
     targets = ["genMet_para_puppi","genMet_perp_puppi",]
-    spectators = ["ptz","event"]
+    spectators = ["event","zPt","zPhi","L1PuppiMet","L1PuppiMetPhi"]
 
     feature_array, target_array, spectator_array = get_features_targets(file_path, features, targets, spectators)
     nevents = feature_array.shape[0]
     nfeatures = feature_array.shape[1]
     ntargets = target_array.shape[1]
     nspec = spectator_array.shape[1]
+    print("Loaded {} events with {} input features, {} targets, and {} spectator variables".format(
+        nevents,nfeatures,ntargets,nspec))
 
     # fit keras model
     X = feature_array
@@ -113,26 +139,26 @@ def main(args):
 
     keras_model = dense(nfeatures, ntargets)
 
-    keras_model.compile(optimizer='adam', loss=[loss_para, loss_perp], 
-                        loss_weights = [1., 1.], metrics=['mean_absolute_error'])
+    keras_model.compile(optimizer="adam", loss=[loss_para, loss_perp], 
+                        loss_weights = [1., 1.], metrics=["mean_absolute_error"])
     print(keras_model.summary())
 
-    early_stopping = EarlyStopping(monitor='val_loss', patience=10)
-    model_checkpoint = ModelCheckpoint('keras_model_best.h5', monitor='val_loss', save_best_only=True)
+    early_stopping = EarlyStopping(monitor="val_loss", patience=10)
+    model_checkpoint = ModelCheckpoint("keras_model_best.h5", monitor="val_loss", save_best_only=True)
     callbacks = [early_stopping, model_checkpoint]
 
     keras_model.fit(X_train, [y_train[:,:1], y_train[:,1:]], batch_size=1024, 
                     epochs=100, validation_data=(X_val, [y_val[:,:1], y_val[:,1:]]), shuffle=True,
                     callbacks = callbacks)
 
-    keras_model.load_weights('keras_model_best.h5')
+    keras_model.load_weights("keras_model_best.h5")
     
     predict_test = keras_model.predict(X_test)
     predict_test = np.concatenate(predict_test,axis=1)
     # print(y_test)
     # print(predict_test)
 
-    def print_res(gen_met, predict_met, name='Met_res.pdf'):
+    def print_res(gen_met, predict_met, name="Met_res.pdf"):
         plt.figure()          
         #rel_err = (predict_met - gen_met)/np.clip(gen_met, 1e-6, None)
         #plt.hist(rel_err, bins=np.linspace(-1., 1., 50+1))
@@ -141,13 +167,45 @@ def main(args):
         plt.hist(err, bins=np.linspace(-100., 100., 50+1))
         plt.xlabel("Rel. err.")
         plt.ylabel("Events")
-        plt.figtext(0.25, 0.90,'CMS',fontweight='bold', wrap=True, horizontalalignment='right', fontsize=14)
-        plt.figtext(0.35, 0.90,'preliminary', style='italic', wrap=True, horizontalalignment='center', fontsize=14) 
+        plt.figtext(0.25, 0.90,"CMS",fontweight="bold", wrap=True, horizontalalignment="right", fontsize=14)
+        plt.figtext(0.35, 0.90,"preliminary", style="italic", wrap=True, horizontalalignment="center", fontsize=14) 
         plt.savefig(name)
 	
-    print_res(y_test[:,0], predict_test[:,0], name = 'MET_para_res.pdf')
-    print_res(y_test[:,1], predict_test[:,1], name = 'MET_perp_res.pdf')
-    
+    print_res(y_test[:,0], predict_test[:,0], name = "MET_para_res.pdf")
+    print_res(y_test[:,1], predict_test[:,1], name = "MET_perp_res.pdf")
+
+    #generate other outputs
+    predict_val = keras_model.predict(X_val)
+    predict_val = np.concatenate(predict_val,axis=1)
+    predict_train = keras_model.predict(X_train)
+    predict_train = np.concatenate(predict_train,axis=1)
+
+    # output prediction, event, type (test/train/valid)
+    out_pred = np.concatenate((predict_train,predict_val,predict_test))
+    out_evt  = np.concatenate((spec_train[:,0],spec_val[:,0],spec_test[:,0]))
+    out_type = np.concatenate((np.zeros(predict_train.shape[0]),
+                               np.ones(predict_val.shape[0]),
+                               2*np.ones(predict_test.shape[0])) )
+
+
+    # def _write_carray(a, h5file, name, group_path="/", **kwargs):
+    #     h5file.create_carray(group_path, name, obj=a, filters=filters, createparents=True, **kwargs)
+    # _write_carray(df_met[k].values, h5file, name=k.replace("[","").replace("]",""))
+
+    # with tables.open_file("ouput_MET_DY.h5", mode="w") as hf:
+    #     filters = tables.Filters(complevel=7, complib="blosc")
+    #     hf.create_carray("/","pred_para",out_pred[:,0],filters=filters)
+    #     hf.create_carray("/","pred_perp", out_pred[:,1],filters=filters)
+    #     hf.create_carray("/","event", out_evt,filters=filters)
+    #     hf.create_carray("/","type", out_type,filters=filters)
+
+    import h5py
+    hf = h5py.File("output_MET_DY.h5", "w")
+    hf.create_dataset("pred_para", data = out_pred[:,0])
+    hf.create_dataset("pred_perp", data = out_pred[:,1])
+    hf.create_dataset("event",     data = out_evt)
+    hf.create_dataset("type",      data = out_type)
+    hf.close()
 
 if __name__ == "__main__":
 
