@@ -27,9 +27,9 @@ for t in met_types:
     met_categories += ["{}Met{}".format(t,r) for r in met_regions]
 
 met_branches = []
-for comp in ["para_z","perp_z","para_puppi","perp_puppi"]:
-    met_branches += [x+"_"+comp for x in met_categories]
-met_branches += ['ptz','event']
+for comp in ["","Phi","_para_z","_perp_z","_para_puppi","_perp_puppi"]:
+    met_branches += [x+comp for x in met_categories]
+met_branches += ['zPt','zPhi','event']
 
 # print(met_branches)
 # exit(0)
@@ -114,7 +114,8 @@ df_met = pd.concat(df_mets)
 # df_met = df_met.reindex(df_other.index.values)
 # df_jet = df_jet.reindex(df_other.index.values,level=0)
 
-df_met = df_met.sample(frac=1)
+# skip shuffle for now
+if False: df_met = df_met.sample(frac=1)
 
 with tables.open_file(outfile, mode='w') as h5file:
     

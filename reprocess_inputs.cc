@@ -86,23 +86,33 @@ public:
 
 // helper class to hide the ugly variable writes w/ ttree
 class MetWriter{
+    float _pt;
+    float _phi;
     float _para;
     float _perp;
-    TString paran;
-    TString perpn;
 public:
-    MetWriter(): _para(), _perp(), paran(), perpn() {}
-    MetWriter(const char* n, TTree *t, TString suffix=""){
+    MetWriter(): _para(), _perp(), _pt(), _phi() {}
+    MetWriter(TString n, TTree *t, TString suffix="", bool writePtPhi=false){
         if (suffix.Length()) suffix = "_"+suffix;
-        paran=TString::Format("%s_para%s",n,suffix.Data());
-        perpn=TString::Format("%s_perp%s",n,suffix.Data());
+        TString paran=n+"_para"+suffix;
+        TString perpn=n+"_perp"+suffix;
+        if(writePtPhi){
+            t->Branch(n,       &_pt, n+"/F");
+            t->Branch(n+"Phi", &_phi,n+"Phi/F");
+        }
         t->Branch(paran, &_para, paran+"/F");
         t->Branch(perpn, &_perp, perpn+"/F");
     }
     ~MetWriter(){}
+    void Set(TVector2 v, float para, float perp){
+        _para = para;
+        _perp = perp;
+        _pt   = v.Mod();
+        _phi  = v.Phi();
+    }
     void Set(float para, float perp){
-        _para=para;
-        _perp=perp;
+        _para = para;
+        _perp = perp;
     }
 };
 
@@ -166,23 +176,33 @@ int main(){
     for(auto n : met_inputs){
         out_keys.push_back(n);
         if(reqZ) output_map_z[n] = new MetWriter(n,t,"z");
-        output_map_puppi[n] = new MetWriter(n,t,"puppi");
+        output_map_puppi[n] = new MetWriter(n,t,"puppi",true); // write also met pt/phi
     }
     for(auto x : jet_map){
         TString n = x.first;
         out_keys.push_back(n);
         if(reqZ) output_map_z[n] = new MetWriter(n,t,"z");
-        output_map_puppi[n] = new MetWriter(n,t,"puppi");
+        output_map_puppi[n] = new MetWriter(n,t,"puppi",true);
     }
 
     // a few other variables to log in the output tree
     float mll; t->Branch("mll", &mll, "mll/F");
-    float ptz; t->Branch("ptz", &ptz, "ptz/F");
+    //float ptz; t->Branch("ptz", &ptz, "ptz/F");
     int nmu; t->Branch("nmu", &nmu, "nmu/I");
     int event; t->Branch("event", &event, "event/I");
 
+    float zPt,zPhi; 
+    t->Branch("zPt", &zPt, "zPt/F");
+    t->Branch("zPhi", &zPhi, "zPhi/F");
+    //float genMet,genMetPhi,puppiMet,puppiMetPhi,zPt,zPhi; 
+    // t->Branch("genMet", &genMet, "genMet/F");
+    // t->Branch("genMetPhi", &genMetPhi, "genMetPhi/F");
+    // t->Branch("puppiMet", &puppiMet, "puppiMet/F");
+    // t->Branch("puppiMetPhi", &puppiMetPhi, "puppiMetPhi/F");
+
+
     // eventloop helpers
-    TVector2 vZ,vPuppi,vPuppiRecoil, vin, vrecoil, vPuppiMetProxy, vinMetProxy;
+    TVector2 vGen,vZ,vPuppi,vPuppiRecoil, vin, vrecoil, vPuppiMetProxy, vinMetProxy;
     TLorentzVector tlvZ;
 
     uint64_t ie=0;
@@ -194,17 +214,20 @@ int main(){
         event=ie;
         nmu = muons.n();
         mll=-1.;
-        ptz=-1.;
+        zPt=-1.;
+        zPhi=-999.;
         if(nmu==2){
             muons.FillTLVs(); // only fill data if needed
             tlvZ = *(muons.tlv(0)) + *(muons.tlv(1));
             mll=tlvZ.M();
-            ptz=tlvZ.Pt();
+            zPt =tlvZ.Pt();
+            zPhi=tlvZ.Phi();
             if(reqZ && fabs(tlvZ.M()-91.)<15.){
                 vZ.SetMagPhi(tlvZ.Pt(),tlvZ.Phi());
             } else if(reqZ) continue;
         } else if(reqZ) continue;
 
+        vGen = input_map["genMet"]->GetV();
         vPuppi = input_map["L1PuppiMet"]->GetV();
         //vPuppiRecoil = -1.*(vPuppi+vZ);
         vPuppiMetProxy = vPuppi+vZ;
@@ -222,7 +245,8 @@ int main(){
             auto writer_puppi = output_map_puppi[name];
             // get MET wrt the PUPPI estimate
             vinMetProxy = (vin+vZ);
-            writer_puppi->Set(SgnPara(vinMetProxy-vPuppiMetProxy,vPuppiMetProxy),
+            writer_puppi->Set(vinMetProxy,
+                              SgnPara(vinMetProxy-vPuppiMetProxy,vPuppiMetProxy),
                               SgnPerp(vinMetProxy,vPuppiMetProxy));
             // get met para, perp components wrt Z
             if(reqZ){
@@ -231,6 +255,12 @@ int main(){
                               SgnPerp(vrecoil,vZ));
             }
         }
+        // write some extra vars to tree
+        // puppiMet    = vPuppiMetProxy.Mag();
+        // puppiMetPhi = vPuppiMetProxy.Phi();
+        // genMet      = vGen.Mag();
+        // genMetPhi   = vGen.Phi();
+            
         t->Fill();
         nwritten++;
     }
