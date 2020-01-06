@@ -1,1 +1,1 @@
-source activate myenv
+source activate wroot

@@ -12,6 +12,7 @@ import argparse
 from models import dense
 import math
 import keras.backend as K
+import uproot
 
 def huber_loss(y_true, y_pred, delta=1.0):
     error = y_pred - y_true
@@ -182,10 +183,15 @@ def main(args):
 
     # output prediction, event, type (test/train/valid)
     out_pred = np.concatenate((predict_train,predict_val,predict_test))
-    out_evt  = np.concatenate((spec_train[:,0],spec_val[:,0],spec_test[:,0]))
     out_type = np.concatenate((np.zeros(predict_train.shape[0]),
                                np.ones(predict_val.shape[0]),
                                2*np.ones(predict_test.shape[0])) )
+    out_spec = np.concatenate((spec_train,spec_val,spec_test))
+    #print(out_spec.shape)
+    # print(spec_train.shape)
+    # print(spec_val.shape)
+    # print(spec_test.shape)
+    #spectators = ["event","zPt","zPhi","L1PuppiMet","L1PuppiMetPhi"]
 
 
     # def _write_carray(a, h5file, name, group_path="/", **kwargs):
@@ -203,8 +209,17 @@ def main(args):
     hf = h5py.File("output_MET_DY.h5", "w")
     hf.create_dataset("pred_para", data = out_pred[:,0])
     hf.create_dataset("pred_perp", data = out_pred[:,1])
-    hf.create_dataset("event",     data = out_evt)
+    #hf.create_dataset("event",     data = out_evt)
     hf.create_dataset("type",      data = out_type)
+    for isp, sp in enumerate(spectators):
+        hf.create_dataset(sp, data = out_spec[:,isp])
+
+    # can also save as a root file from h5
+    f = uproot.recreate("output_MET_DY.root")
+    f["Events"] = uproot.newtree( hf )
+    f["Events"].extend( {k:np.array(hf[k]) for k in hf.keys()} )
+    f.close()
+        
     hf.close()
 
 if __name__ == "__main__":
