@@ -11,7 +11,7 @@ infiles = [
     "samples/perfNano_DY_reprocessed.root",
 ]
 
-outfile = 'input_MET_DY.h5'
+outfile = 'samples/input_MET_DY.h5'
 #outfile = 'input_MET.h5'
 #entrystop = 10000
 entrystop = None

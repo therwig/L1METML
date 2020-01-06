@@ -89,7 +89,7 @@ def write_outputs(file_name, features, targets, spectators):
     h5file.close()
 
 def main(args):
-    file_path = "input_MET_DY.h5"
+    file_path = "samples/input_MET_DY.h5"
 
     features = [
         "L1CaloMet_para_puppi","L1CaloMet_perp_puppi",
@@ -206,16 +206,16 @@ def main(args):
     #     hf.create_carray("/","type", out_type,filters=filters)
 
     import h5py
-    hf = h5py.File("output_MET_DY.h5", "w")
-    hf.create_dataset("pred_para", data = out_pred[:,0])
-    hf.create_dataset("pred_perp", data = out_pred[:,1])
+    hf = h5py.File("samples/output_MET_DY.h5", "w")
+    hf.create_dataset("pred_para_puppi", data = out_pred[:,0])
+    hf.create_dataset("pred_perp_puppi", data = out_pred[:,1])
     #hf.create_dataset("event",     data = out_evt)
     hf.create_dataset("type",      data = out_type)
     for isp, sp in enumerate(spectators):
         hf.create_dataset(sp, data = out_spec[:,isp])
 
     # can also save as a root file from h5
-    f = uproot.recreate("output_MET_DY.root")
+    f = uproot.recreate("samples/output_MET_DY.root")
     f["Events"] = uproot.newtree( hf )
     f["Events"].extend( {k:np.array(hf[k]) for k in hf.keys()} )
     f.close()
