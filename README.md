@@ -33,6 +33,6 @@ python convert-results.py
 
 Run pyRoot analysis scripts:
 ```
-python quickana.py
+python quickana.py -b
 ```
 
