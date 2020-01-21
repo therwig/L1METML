@@ -26,12 +26,7 @@ Train with h5 inputs:
 python train.py
 ```
 
-Convert back to root for evaluation:
-```
-python convert-results.py
-```
-
-Run pyRoot analysis scripts:
+Run pyRoot-based analysis script:
 ```
 python quickana.py -b
 ```
