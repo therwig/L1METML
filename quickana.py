@@ -25,7 +25,7 @@ t.Draw("zPt>>"+hists["ptz"].GetName())
 t.Draw("zPt:zPt>>"+hists["ptz_2d"].GetName())
 
 met_types=["genMet","L1CaloMet","L1PFMet","L1PuppiMet",
-          "CaloHTMiss","PFHTMiss","PuppiHTMiss",
+#          "CaloHTMiss","PFHTMiss","PuppiHTMiss",
 #           "pred"
 ]
 para_n, para_lo, para_hi = (160,-300,500)
@@ -42,6 +42,9 @@ book2(hists,"pred_perp",zpt_n,0,zpt_hi,para_n,para_lo,para_hi)
 ROOT.gROOT.LoadMacro("resultWRTz.C")
 t.Draw("resultWRTz(pred_para_puppi,pred_perp_puppi,L1PuppiMet,L1PuppiMetPhi,zPt,zPhi,1):zPt>>"+hists["pred_para"].GetName())
 t.Draw("resultWRTz(pred_para_puppi,pred_perp_puppi,L1PuppiMet,L1PuppiMetPhi,zPt,zPhi,0):zPt>>"+hists["pred_perp"].GetName())
+# xcheck that the genMet results are reproduced
+# t.Draw("resultWRTz(genMet_para_puppi,genMet_perp_puppi,L1PuppiMet,L1PuppiMetPhi,zPt,zPhi,1):zPt>>"+hists["pred_para"].GetName())
+# t.Draw("resultWRTz(genMet_para_puppi,genMet_perp_puppi,L1PuppiMet,L1PuppiMetPhi,zPt,zPhi,0):zPt>>"+hists["pred_perp"].GetName())
 
 if True: #store hists
     fout = ROOT.TFile("tmp/histograms.root","recreate")

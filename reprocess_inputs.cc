@@ -204,6 +204,7 @@ int main(){
     // eventloop helpers
     TVector2 vGen,vZ,vPuppi,vPuppiRecoil, vin, vrecoil, vPuppiMetProxy, vinMetProxy;
     TLorentzVector tlvZ;
+    bool DEBUG=true;
 
     uint64_t ie=0;
     uint64_t nwritten=0;
@@ -255,6 +256,48 @@ int main(){
                               SgnPerp(vrecoil,vZ));
             }
         }
+
+        if(DEBUG && ie < 5){
+            // vZ = TVector2(200,10);
+            // vPuppi = TVector2(12,0);
+            // vGen = TVector2(6,8);
+
+            cout << "Event " << ie << endl;
+            cout << "Z boson:             "; vZ.Print();
+            cout << "genMet:              "; vGen.Print();
+            cout << "genMet recoil:       "; (vGen+vZ).Print();
+            cout << "L1PuppiMet:          "; vPuppi.Print();
+            cout << "L1PuppiMet recoil:   "; (vPuppi+vZ).Print();
+            // calc the correction to puppi met needed to match gen met
+            cout << " == closure check == " << endl;
+            float corr_para = -SgnPara((vGen+vZ)-(vPuppi+vZ),(vPuppi+vZ));
+            float corr_perp = SgnPerp((vGen+vZ),(vPuppi+vZ));
+            cout << " para =              " << corr_para << endl;
+            cout << " perp =              " << corr_perp << endl;
+            TVector2 vCorr(corr_para, corr_perp);
+            cout << "vCorr: "; vCorr.Print();
+            vCorr = vCorr.Rotate((vPuppi+vZ).Phi());
+            cout << "  (rotating by " << (vPuppi+vZ).Phi() << ")" << endl;
+            cout << "vCorr rotated:       "; vCorr.Print();
+            cout << "puppi corr->genMet:  "; (vPuppi+vCorr).Print();
+            cout << "puppi corr->genMet+z:"; (vPuppi+vCorr+vZ).Print();
+            cout << " == FINAL ANSWER == " << endl;
+            cout << "genMet:              "; vGen.Print();
+            cout << "puppi corr->genMet:  "; (vPuppi+vCorr).Print();
+            cout << "genMet recoil:       "; (vGen+vZ).Print();
+            cout << "puppi corr->genMet+z:"; (vPuppi+vCorr+vZ).Print();
+            cout << endl;
+            //exit(0);
+
+            // float corr_para = -SgnPara((vGen+vZ)-(vPuppi+vZ),(vPuppi+vZ));
+            // float corr_perp = SgnPerp((vGen+vZ),(vPuppi+vZ));
+            // TVector2 vCorr(corr_para, corr_perp);
+            // vCorr = vCorr.Rotate((vPuppi+vZ).Phi());
+            // cout << "genMet recoil:       "; (vGen+vZ).Print();
+            // cout << "puppi corr->genMet+z:"; (vPuppi+vCorr+vZ).Print();
+
+        }
+
         // write some extra vars to tree
         // puppiMet    = vPuppiMetProxy.Mag();
         // puppiMetPhi = vPuppiMetProxy.Phi();
