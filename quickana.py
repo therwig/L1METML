@@ -74,9 +74,9 @@ if True: #store graphs
     fout.Close()
 
 # produce summary plots
-# sel = lambda x : (not "pred" in x or "all" in x) # "all pred" only
+sel = lambda x : (not "pred" in x or "all" in x) # "all pred" only
 # sel = lambda x : (not "pred" in x or "test" in x) # "test pred" only
-sel = lambda x : True # "all types"
+#sel = lambda x : True # "all types"
 para_resp = {g:graphs[g] for g in graphs if ("para" in g and "resp" in g and sel(g))}
 para_reso = {g:graphs[g] for g in graphs if ("para" in g and "reso" in g and sel(g))}
 perp_resp = {g:graphs[g] for g in graphs if ("perp" in g and "resp" in g and sel(g))}

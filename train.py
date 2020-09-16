@@ -13,31 +13,7 @@ from models import dense
 import math
 import keras.backend as K
 import uproot
-
-def huber_loss(y_true, y_pred, delta=1.0):
-    error = y_pred - y_true
-    abs_error = K.abs(error)
-    quadratic = K.minimum(abs_error, delta)
-    linear = abs_error - quadratic
-    return 0.5 * K.square(quadratic) + delta * linear
-
-def mean_absolute_relative_error(y_true, y_pred):
-    if not K.is_tensor(y_pred):
-        y_pred = K.constant(y_pred)
-    y_true = K.cast(y_true, y_pred.dtype)
-    diff = K.abs((y_true - y_pred) / K.clip(K.abs(y_true),
-                                            K.epsilon(),
-                                            None))
-    return K.mean(diff, axis=-1)
-
-def mean_squared_relative_error(y_true, y_pred):
-    if not K.is_tensor(y_pred):
-        y_pred = K.constant(y_pred)
-    y_true = K.cast(y_true, y_pred.dtype)
-    diff = K.square((y_true - y_pred) / K.clip(K.square(y_true),
-                                            K.epsilon(),
-                                            None))
-    return K.mean(diff, axis=-1)
+from functools import partial
 
 def get_features_targets(file_name, features, targets, spectators):
     # load file
@@ -102,6 +78,7 @@ def main(args):
 
     targets = ["genMet_para_puppi","genMet_perp_puppi",]
     spectators = ["event","zPt","zPhi","L1PuppiMet","L1PuppiMetPhi"]
+    zpt_index=1
 
     feature_array, target_array, spectator_array = get_features_targets(file_path, features, targets, spectators)
     nevents = feature_array.shape[0]
@@ -133,14 +110,28 @@ def main(args):
     spec_val = spectator_array[splits[1]:splits[2]]
     spec_test = spectator_array[splits[0]:splits[1]]
 
-    def loss_para(y_true, y_pred):
+    #
+    # transform the features, target in bins
+    #
+
+    def loss(y_true, y_pred):
         return K.mean(math_ops.square(y_pred - y_true), axis=-1)
-    def loss_perp(y_true, y_pred):
-        return K.mean(math_ops.square(y_pred - y_true), axis=-1)
+        #return K.mean(math_ops.abs(y_pred - y_true), axis=-1)
+
+    # weight implementation
+    wfunc = lambda x : 1./(8.53141*np.exp(-4.26119e-02*x)) # obtained by fitting z pt
+    capping = lambda x : np.where(x<20,wfunc(20), np.where(x>150,wfunc(150), wfunc(x)))
+    invpt_weights = capping(spec_train[:,zpt_index]) #zpt, index defined above
+    #invpt_weights = wfunc(spec_train[:,zpt_index]) #zpt, index defined above
+    def loss_weight(weights):
+        def _loss_weight(y_true, y_pred):
+            return K.mean(math_ops.square(y_pred - y_true)*weights, axis=-1)
+        return _loss_weight
 
     keras_model = dense(nfeatures, ntargets)
 
-    keras_model.compile(optimizer="adam", loss=[loss_para, loss_perp], 
+    #keras_model.compile(optimizer="adam", loss=[loss, loss], 
+    keras_model.compile(optimizer="adam", loss=[loss_weight(invpt_weights), loss_weight(invpt_weights)], 
                         loss_weights = [1., 1.], metrics=["mean_absolute_error"])
     print(keras_model.summary())
 
